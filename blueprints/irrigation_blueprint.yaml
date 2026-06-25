@@ -81,17 +81,65 @@ blueprint:
           mode: slider
 
     # --- Time window ---
-    start_time:
-      name: "Irrigation start time"
+    start_mode:
+      name: "Start mode"
+      default: "time"
+      selector:
+        select:
+          options:
+            - label: "Fixed time"
+              value: "time"
+            - label: "Sunrise"
+              value: "sunrise"
+            - label: "Sunset"
+              value: "sunset"
+
+    start_fixed_time:
+      name: "Start time"
       default: "06:00:00"
       selector:
         time:
 
+    start_sun_offset:
+      name: "Start sun offset (minutes)"
+      default: 0
+      selector:
+        number:
+          min: -120
+          max: 120
+          step: 5
+          unit_of_measurement: "min"
+          mode: slider
+
+    end_mode:
+      name: "End mode"
+      default: "time"
+      selector:
+        select:
+          options:
+            - label: "Fixed time"
+              value: "time"
+            - label: "Sunrise"
+              value: "sunrise"
+            - label: "Sunset"
+              value: "sunset"
+
     end_time:
-      name: "Irrigation end time"
+      name: "End time"
       default: "09:00:00"
       selector:
         time:
+
+    end_sun_offset:
+      name: "End sun offset (minutes)"
+      default: 0
+      selector:
+        number:
+          min: -120
+          max: 120
+          step: 5
+          unit_of_measurement: "min"
+          mode: slider
 
     # --- Cooldown ---
     cooldown_minutes:
@@ -145,13 +193,6 @@ blueprint:
         entity:
           domain: input_boolean
 
-    irrigation_in_progress:
-      name: "Helper — Irrigation in progress"
-      description: "internal semaphore input_boolean (create a dedicated helper for this terrace)"
-      selector:
-        entity:
-          domain: input_boolean
-
     # --- Notifications ---
     notification:
       name: "Notification service"
@@ -173,6 +214,12 @@ variables:
   vacation_mode:   !input vacation_mode
   normal_duration: !input normal_duration
   vacation_irrigation_duration: !input vacation_irrigation_duration
+  start_mode: !input start_mode
+  start_fixed_time: !input start_fixed_time
+  start_sun_offset: !input start_sun_offset
+  end_mode: !input end_mode
+  end_time: !input end_time
+  end_sun_offset: !input end_sun_offset
 
 trigger:
   - platform: template
@@ -181,10 +228,34 @@ trigger:
       {% set large  = states(large_pot_sensor)  | float(0) %}
       {% set moisture = (small * weight + large * (1 - weight)) | round(1) %}
       {% if is_state(vacation_mode, 'on') %}
-        {{ moisture < (vacation_threshold | float(50)) }}
+        {% set threshold = vacation_threshold | float(50) %}
       {% else %}
-        {{ moisture < (normal_threshold | float(40)) }}
+        {% set threshold = normal_threshold | float(40) %}
       {% endif %}
+      {% set start_offset = timedelta(minutes=start_sun_offset | int(0)) %}
+      {% if start_mode == 'sunrise' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
+        {% set start = next_sun + start_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + start_offset %}
+      {% elif start_mode == 'sunset' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
+        {% set start = next_sun + start_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + start_offset %}
+      {% else %}
+        {% set start = today_at(start_fixed_time) %}
+      {% endif %}
+      {% set end_offset = timedelta(minutes=end_sun_offset | int(0)) %}
+      {% if end_mode == 'sunrise' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
+        {% set end = next_sun + end_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + end_offset %}
+      {% elif end_mode == 'sunset' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
+        {% set end = next_sun + end_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + end_offset %}
+      {% else %}
+        {% set end = today_at(end_time) %}
+      {% endif %}
+      {% set end = end + timedelta(days=1) if end <= start else end %}
+      {% set yesterday_start = start - timedelta(days=1) %}
+      {% set yesterday_end = end - timedelta(days=1) %}
+      {{ moisture < threshold and ((now() >= start and now() <= end) or (now() >= yesterday_start and now() <= yesterday_end)) }}
     for:
       minutes: 5
 
@@ -193,18 +264,36 @@ condition:
     entity_id: !input irrigation_pause
     state: "off"
   - condition: state
-    entity_id: !input irrigation_in_progress
+    entity_id: !input irrigation_valve
     state: "off"
-  - condition: time
-    after:  !input start_time
-    before: !input end_time
+  - condition: template
+    value_template: >
+      {% set start_offset = timedelta(minutes=start_sun_offset | int(0)) %}
+      {% if start_mode == 'sunrise' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
+        {% set start = next_sun + start_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + start_offset %}
+      {% elif start_mode == 'sunset' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
+        {% set start = next_sun + start_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + start_offset %}
+      {% else %}
+        {% set start = today_at(start_fixed_time) %}
+      {% endif %}
+      {% set end_offset = timedelta(minutes=end_sun_offset | int(0)) %}
+      {% if end_mode == 'sunrise' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
+        {% set end = next_sun + end_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + end_offset %}
+      {% elif end_mode == 'sunset' %}
+        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
+        {% set end = next_sun + end_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + end_offset %}
+      {% else %}
+        {% set end = today_at(end_time) %}
+      {% endif %}
+      {% set end = end + timedelta(days=1) if end <= start else end %}
+      {% set yesterday_start = start - timedelta(days=1) %}
+      {% set yesterday_end = end - timedelta(days=1) %}
+      {{ (now() >= start and now() <= end) or (now() >= yesterday_start and now() <= yesterday_end) }}
 
 action:
-  # Set in-progress flag
-  - service: input_boolean.turn_on
-    target:
-      entity_id: !input irrigation_in_progress
-
   # Calculate duration based on mode
   - variables:
       duration: >
@@ -259,10 +348,4 @@ action:
           message: >
             Moisture still at {{ current_moisture_post }}% after irrigation.
             Check pots or sensors.
-
-  # Clear in-progress flag
-  - service: input_boolean.turn_off
-    target:
-      entity_id: !input irrigation_in_progress
-
 mode: single
