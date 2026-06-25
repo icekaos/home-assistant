@@ -194,12 +194,25 @@ blueprint:
           domain: input_boolean
 
     # --- Notifications ---
-    notification:
-      name: "Notification service"
-      description: "E.g.: notify.mobile_app_tuo_telefono"
-      default: "notify.mobile_app_tuo_telefono"
+    notification_device:
+      name: "Notification device"
+      description: "Mobile app device that receives post-irrigation warnings"
       selector:
-        text:
+        device:
+          filter:
+            - integration: mobile_app
+
+    notify_on_start:
+      name: "Notify irrigation start"
+      default: false
+      selector:
+        boolean:
+
+    notify_on_stop:
+      name: "Notify irrigation stop"
+      default: false
+      selector:
+        boolean:
 
 # ============================================================
 # AUTOMATION LOGIC
@@ -220,6 +233,8 @@ variables:
   end_mode: !input end_mode
   end_time: !input end_time
   end_sun_offset: !input end_sun_offset
+  notify_on_start: !input notify_on_start
+  notify_on_stop: !input notify_on_stop
 
 trigger:
   - platform: template
@@ -312,6 +327,17 @@ action:
     target:
       entity_id: !input irrigation_valve
 
+  - if:
+      - condition: template
+        value_template: "{{ notify_on_start }}"
+    then:
+      - device_id: !input notification_device
+        domain: mobile_app
+        type: notify
+        title: "🌱 Terrace — Irrigation started"
+        message: >
+          Irrigation started. Current moisture is {{ current_moisture }}%.
+
   # Wait the calculated duration
   - delay:
       minutes: "{{ duration }}"
@@ -320,6 +346,17 @@ action:
   - service: switch.turn_off
     target:
       entity_id: !input irrigation_valve
+
+  - if:
+      - condition: template
+        value_template: "{{ notify_on_stop }}"
+    then:
+      - device_id: !input notification_device
+        domain: mobile_app
+        type: notify
+        title: "🌱 Terrace — Irrigation stopped"
+        message: >
+          Irrigation stopped after {{ duration }} minutes.
 
   # Absorption cooldown
   - delay:
@@ -340,12 +377,13 @@ action:
 
   - if:
       - condition: template
-        value_template: "{{ current_moisture_post < active_threshold }}"
+        value_template: "{{ current_moisture_post | float(0) < active_threshold | float(0) }}"
     then:
-      - service: !input notification
-        data:
-          title: "🌱 Terrace — Attention"
-          message: >
-            Moisture still at {{ current_moisture_post }}% after irrigation.
-            Check pots or sensors.
+      - device_id: !input notification_device
+        domain: mobile_app
+        type: notify
+        title: "🌱 Terrace — Attention"
+        message: >
+          Moisture still at {{ current_moisture_post }}% after irrigation.
+          Check pots or sensors.
 mode: single
