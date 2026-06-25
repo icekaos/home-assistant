@@ -1,0 +1,498 @@
+input_number:
+  plants_threshold_ts_piccolo:
+    name: Soglia sete TS piccolo
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:water-percent
+    initial: 35
+
+  plants_threshold_ts_grande:
+    name: Soglia sete TS grande
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:water-percent
+    initial: 35
+
+  plants_threshold_tcm_piccolo:
+    name: Soglia sete TCM piccolo
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:water-percent
+    initial: 35
+
+  plants_threshold_tcm_grande:
+    name: Soglia sete TCM grande
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:water-percent
+    initial: 35
+
+  plants_threshold_potus:
+    name: Soglia sete Potus
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:water-percent
+    initial: 30
+
+  plants_threshold_stella_di_natale:
+    name: Soglia sete Stella di Natale
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:water-percent
+    initial: 30
+
+input_boolean:
+  pianta_sete_ts_piccolo_notified:
+    name: Pianta sete TS piccolo notificata
+    icon: mdi:water-alert
+
+  pianta_sete_ts_grande_notified:
+    name: Pianta sete TS grande notificata
+    icon: mdi:water-alert
+
+  pianta_sete_tcm_piccolo_notified:
+    name: Pianta sete TCM piccolo notificata
+    icon: mdi:water-alert
+
+  pianta_sete_tcm_grande_notified:
+    name: Pianta sete TCM grande notificata
+    icon: mdi:water-alert
+
+  pianta_sete_potus_notified:
+    name: Pianta sete Potus notificata
+    icon: mdi:water-alert
+
+  pianta_sete_stella_di_natale_notified:
+    name: Pianta sete Stella di Natale notificata
+    icon: mdi:water-alert
+
+template:
+  - binary_sensor:
+      - name: "Plant thirsty TS piccolo"
+        unique_id: plant_thirsty_ts_piccolo
+        device_class: problem
+        state: >
+          {{
+            states('sensor.plantsensor_ts_piccolo_soil_moisture') | float(999)
+            < states('input_number.plants_threshold_ts_piccolo') | float(35)
+          }}
+        attributes:
+          plant_name: "Terrazzo Salotto - vasi piccoli"
+          moisture: "{{ states('sensor.plantsensor_ts_piccolo_soil_moisture') }}"
+          threshold: "{{ states('input_number.plants_threshold_ts_piccolo') }}"
+
+      - name: "Plant thirsty TS grande"
+        unique_id: plant_thirsty_ts_grande
+        device_class: problem
+        state: >
+          {{
+            states('sensor.plantsensor_ts_grande_soil_moisture') | float(999)
+            < states('input_number.plants_threshold_ts_grande') | float(35)
+          }}
+        attributes:
+          plant_name: "Terrazzo Salotto - vasi grandi"
+          moisture: "{{ states('sensor.plantsensor_ts_grande_soil_moisture') }}"
+          threshold: "{{ states('input_number.plants_threshold_ts_grande') }}"
+
+      - name: "Plant thirsty TCM piccolo"
+        unique_id: plant_thirsty_tcm_piccolo
+        device_class: problem
+        state: >
+          {{
+            states('sensor.plantsensor_tcm_piccolo_soil_moisture') | float(999)
+            < states('input_number.plants_threshold_tcm_piccolo') | float(35)
+          }}
+        attributes:
+          plant_name: "Terrazzo Camera Matrimoniale - vasi piccoli"
+          moisture: "{{ states('sensor.plantsensor_tcm_piccolo_soil_moisture') }}"
+          threshold: "{{ states('input_number.plants_threshold_tcm_piccolo') }}"
+
+      - name: "Plant thirsty TCM grande"
+        unique_id: plant_thirsty_tcm_grande
+        device_class: problem
+        state: >
+          {{
+            states('sensor.plantsensor_tcm_grande_soil_moisture') | float(999)
+            < states('input_number.plants_threshold_tcm_grande') | float(35)
+          }}
+        attributes:
+          plant_name: "Terrazzo Camera Matrimoniale - vasi grandi"
+          moisture: "{{ states('sensor.plantsensor_tcm_grande_soil_moisture') }}"
+          threshold: "{{ states('input_number.plants_threshold_tcm_grande') }}"
+
+      - name: "Plant thirsty Potus"
+        unique_id: plant_thirsty_potus
+        device_class: problem
+        state: >
+          {{
+            states('sensor.plantsensor_potus_soil_moisture') | float(999)
+            < states('input_number.plants_threshold_potus') | float(30)
+          }}
+        attributes:
+          plant_name: "Potus"
+          moisture: "{{ states('sensor.plantsensor_potus_soil_moisture') }}"
+          threshold: "{{ states('input_number.plants_threshold_potus') }}"
+
+      - name: "Plant thirsty Stella di Natale"
+        unique_id: plant_thirsty_stella_di_natale
+        device_class: problem
+        state: >
+          {{
+            states('sensor.plantsensor_stella_di_natale_soil_moisture') | float(999)
+            < states('input_number.plants_threshold_stella_di_natale') | float(30)
+          }}
+        attributes:
+          plant_name: "Stella di Natale"
+          moisture: "{{ states('sensor.plantsensor_stella_di_natale_soil_moisture') }}"
+          threshold: "{{ states('input_number.plants_threshold_stella_di_natale') }}"
+
+  - sensor:
+      - name: "Plants thirsty count"
+        unique_id: plants_thirsty_count
+        icon: mdi:flower-alert
+        unit_of_measurement: "piante"
+        state: >
+          {{
+            [
+              states('binary_sensor.plant_thirsty_ts_piccolo'),
+              states('binary_sensor.plant_thirsty_ts_grande'),
+              states('binary_sensor.plant_thirsty_tcm_piccolo'),
+              states('binary_sensor.plant_thirsty_tcm_grande'),
+              states('binary_sensor.plant_thirsty_potus'),
+              states('binary_sensor.plant_thirsty_stella_di_natale')
+            ] | select('eq', 'on') | list | count
+          }}
+
+      - name: "Plants thirsty list"
+        unique_id: plants_thirsty_list
+        icon: mdi:format-list-bulleted
+        state: >
+          {% set thirsty = [] %}
+
+          {% if is_state('binary_sensor.plant_thirsty_ts_piccolo', 'on') %}
+            {% set thirsty = thirsty + ['Terrazzo Salotto - vasi piccoli'] %}
+          {% endif %}
+          {% if is_state('binary_sensor.plant_thirsty_ts_grande', 'on') %}
+            {% set thirsty = thirsty + ['Terrazzo Salotto - vasi grandi'] %}
+          {% endif %}
+          {% if is_state('binary_sensor.plant_thirsty_tcm_piccolo', 'on') %}
+            {% set thirsty = thirsty + ['Terrazzo Camera Matrimoniale - vasi piccoli'] %}
+          {% endif %}
+          {% if is_state('binary_sensor.plant_thirsty_tcm_grande', 'on') %}
+            {% set thirsty = thirsty + ['Terrazzo Camera Matrimoniale - vasi grandi'] %}
+          {% endif %}
+          {% if is_state('binary_sensor.plant_thirsty_potus', 'on') %}
+            {% set thirsty = thirsty + ['Potus'] %}
+          {% endif %}
+          {% if is_state('binary_sensor.plant_thirsty_stella_di_natale', 'on') %}
+            {% set thirsty = thirsty + ['Stella di Natale'] %}
+          {% endif %}
+
+          {{ thirsty | join(', ') if thirsty | count > 0 else 'None' }}
+
+script:
+  notify_all_phones_plants:
+    alias: Notify all phones - plants
+    mode: parallel
+    fields:
+      title:
+        description: Notification title
+        example: "🌱 Plants need water"
+      message:
+        description: Notification message
+        example: "Potus is below threshold"
+    sequence:
+      - service: notify.mobile_app_iphone_thomas
+        data:
+          title: "{{ title }}"
+          message: "{{ message }}"
+
+      - service: notify.mobile_app_iphone_sara
+        data:
+          title: "{{ title }}"
+          message: "{{ message }}"
+
+automation:
+  - id: plants_mark_ts_piccolo_notified
+    alias: "Plants - mark TS piccolo notified"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.plant_thirsty_ts_piccolo
+        to: "on"
+        for: "00:30:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.pianta_sete_ts_piccolo_notified
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pianta_sete_ts_piccolo_notified
+
+  - id: plants_mark_ts_grande_notified
+    alias: "Plants - mark TS grande notified"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.plant_thirsty_ts_grande
+        to: "on"
+        for: "00:30:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.pianta_sete_ts_grande_notified
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pianta_sete_ts_grande_notified
+
+  - id: plants_mark_tcm_piccolo_notified
+    alias: "Plants - mark TCM piccolo notified"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.plant_thirsty_tcm_piccolo
+        to: "on"
+        for: "00:30:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.pianta_sete_tcm_piccolo_notified
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pianta_sete_tcm_piccolo_notified
+
+  - id: plants_mark_tcm_grande_notified
+    alias: "Plants - mark TCM grande notified"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.plant_thirsty_tcm_grande
+        to: "on"
+        for: "00:30:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.pianta_sete_tcm_grande_notified
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pianta_sete_tcm_grande_notified
+
+  - id: plants_mark_potus_notified
+    alias: "Plants - mark Potus notified"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.plant_thirsty_potus
+        to: "on"
+        for: "00:30:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.pianta_sete_potus_notified
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pianta_sete_potus_notified
+
+  - id: plants_mark_stella_di_natale_notified
+    alias: "Plants - mark Stella di Natale notified"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.plant_thirsty_stella_di_natale
+        to: "on"
+        for: "00:30:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.pianta_sete_stella_di_natale_notified
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pianta_sete_stella_di_natale_notified
+
+  - id: plants_send_summary_notification
+    alias: "Plants - send thirst summary notification"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id:
+          - input_boolean.pianta_sete_ts_piccolo_notified
+          - input_boolean.pianta_sete_ts_grande_notified
+          - input_boolean.pianta_sete_tcm_piccolo_notified
+          - input_boolean.pianta_sete_tcm_grande_notified
+          - input_boolean.pianta_sete_potus_notified
+          - input_boolean.pianta_sete_stella_di_natale_notified
+        to: "on"
+
+    condition:
+      - condition: state
+        entity_id: input_boolean.pausa_irrigazione
+        state: "off"
+
+    action:
+      - variables:
+          thirsty_lines: >
+            {% set items = [] %}
+
+            {% if is_state('input_boolean.pianta_sete_ts_piccolo_notified', 'on') %}
+              {% set moisture = states('sensor.plantsensor_ts_piccolo_soil_moisture') | float(0) | round(0) %}
+              {% set threshold = states('input_number.plants_threshold_ts_piccolo') | float(0) | round(0) %}
+              {% set items = items + ['• Terrazzo Salotto - vasi piccoli (' ~ moisture ~ '%, soglia ' ~ threshold ~ '%)'] %}
+            {% endif %}
+
+            {% if is_state('input_boolean.pianta_sete_ts_grande_notified', 'on') %}
+              {% set moisture = states('sensor.plantsensor_ts_grande_soil_moisture') | float(0) | round(0) %}
+              {% set threshold = states('input_number.plants_threshold_ts_grande') | float(0) | round(0) %}
+              {% set items = items + ['• Terrazzo Salotto - vasi grandi (' ~ moisture ~ '%, soglia ' ~ threshold ~ '%)'] %}
+            {% endif %}
+
+            {% if is_state('input_boolean.pianta_sete_tcm_piccolo_notified', 'on') %}
+              {% set moisture = states('sensor.plantsensor_tcm_piccolo_soil_moisture') | float(0) | round(0) %}
+              {% set threshold = states('input_number.plants_threshold_tcm_piccolo') | float(0) | round(0) %}
+              {% set items = items + ['• Terrazzo Camera Matrimoniale - vasi piccoli (' ~ moisture ~ '%, soglia ' ~ threshold ~ '%)'] %}
+            {% endif %}
+
+            {% if is_state('input_boolean.pianta_sete_tcm_grande_notified', 'on') %}
+              {% set moisture = states('sensor.plantsensor_tcm_grande_soil_moisture') | float(0) | round(0) %}
+              {% set threshold = states('input_number.plants_threshold_tcm_grande') | float(0) | round(0) %}
+              {% set items = items + ['• Terrazzo Camera Matrimoniale - vasi grandi (' ~ moisture ~ '%, soglia ' ~ threshold ~ '%)'] %}
+            {% endif %}
+
+            {% if is_state('input_boolean.pianta_sete_potus_notified', 'on') %}
+              {% set moisture = states('sensor.plantsensor_potus_soil_moisture') | float(0) | round(0) %}
+              {% set threshold = states('input_number.plants_threshold_potus') | float(0) | round(0) %}
+              {% set items = items + ['• Potus (' ~ moisture ~ '%, soglia ' ~ threshold ~ '%)'] %}
+            {% endif %}
+
+            {% if is_state('input_boolean.pianta_sete_stella_di_natale_notified', 'on') %}
+              {% set moisture = states('sensor.plantsensor_stella_di_natale_soil_moisture') | float(0) | round(0) %}
+              {% set threshold = states('input_number.plants_threshold_stella_di_natale') | float(0) | round(0) %}
+              {% set items = items + ['• Stella di Natale (' ~ moisture ~ '%, soglia ' ~ threshold ~ '%)'] %}
+            {% endif %}
+
+            {{ items | join('\n') }}
+
+          thirsty_count: "{{ states('sensor.plants_thirsty_count') | int(0) }}"
+
+      - service: script.notify_all_phones_plants
+        data:
+          title: >-
+            {% if thirsty_count == 1 %}
+              🌱 1 pianta ha sete
+            {% else %}
+              🌱 {{ thirsty_count }} piante hanno sete
+            {% endif %}
+          message: "{{ thirsty_lines }}"
+
+  - id: plants_reset_ts_piccolo_notified
+    alias: "Plants - reset TS piccolo notified"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.plantsensor_ts_piccolo_soil_moisture
+        above: 38
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pianta_sete_ts_piccolo_notified
+
+  - id: plants_reset_ts_grande_notified
+    alias: "Plants - reset TS grande notified"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.plantsensor_ts_grande_soil_moisture
+        above: 38
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pianta_sete_ts_grande_notified
+
+  - id: plants_reset_tcm_piccolo_notified
+    alias: "Plants - reset TCM piccolo notified"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.plantsensor_tcm_piccolo_soil_moisture
+        above: 38
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pianta_sete_tcm_piccolo_notified
+
+  - id: plants_reset_tcm_grande_notified
+    alias: "Plants - reset TCM grande notified"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.plantsensor_tcm_grande_soil_moisture
+        above: 38
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pianta_sete_tcm_grande_notified
+
+  - id: plants_reset_potus_notified
+    alias: "Plants - reset Potus notified"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.plantsensor_potus_soil_moisture
+        above: 35
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pianta_sete_potus_notified
+
+  - id: plants_reset_stella_di_natale_notified
+    alias: "Plants - reset Stella di Natale notified"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.plantsensor_stella_di_natale_soil_moisture
+        above: 35
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pianta_sete_stella_di_natale_notified
