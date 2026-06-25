@@ -158,7 +158,8 @@ blueprint:
       description: "Es: notify.mobile_app_tuo_telefono"
       default: "notify.mobile_app_tuo_telefono"
       selector:
-        text:
+        entity:
+          domain: notify
 
 # ============================================================
 # LOGICA AUTOMAZIONE
