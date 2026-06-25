@@ -39,7 +39,7 @@ blueprint:
 
     # --- Valve ---
     irrigation_valve:
-      name: "Irrigation valve (Aqua One)"
+      name: "Irrigation valve"
       description: "Switch that controls the water flow"
       selector:
         entity:
