@@ -1,0 +1,268 @@
+# ============================================================
+# BLUEPRINT — Terrace Irrigation System
+# ============================================================
+# Installation:
+#   1. Copy this file to:
+#      config/blueprints/automation/irrigazione_terrazzo.yaml
+#   2. Restart Home Assistant or reload blueprints
+#   3. Go to Settings → Automations → Create Automation
+#      → From blueprint → "Terrace Irrigation System"
+#   4. Fill the form for each terrace and save
+# ============================================================
+
+blueprint:
+  name: "Terrace Irrigation System"
+  description: >
+    Automatic irrigation based on a weighted average of two
+    moisture sensors (small and large pots). Includes vacation mode,
+    post-irrigation cooldown, manual pause and push notifications.
+  domain: automation
+  author: "Thomas"
+
+  input:
+    # --- Sensors ---
+    small_pot_sensor:
+      name: "Moisture sensor — small pots"
+      description: "Zigbee moisture sensor placed in a representative small pot"
+      selector:
+        entity:
+          domain: sensor
+          device_class: moisture
+
+    large_pot_sensor:
+      name: "Moisture sensor — large pots"
+      description: "Zigbee moisture sensor placed in a representative large pot"
+      selector:
+        entity:
+          domain: sensor
+          device_class: moisture
+
+    # --- Valve ---
+    irrigation_valve:
+      name: "Irrigation valve (Aqua One)"
+      description: "Switch that controls the water flow"
+      selector:
+        entity:
+          domain: switch
+
+    # --- Weights and thresholds ---
+    small_pot_weight:
+      name: "Small pots weight"
+      description: "Priority of small pots in the calculation (0.0 = only large, 1.0 = only small)"
+      default: 0.7
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.05
+          mode: slider
+
+    normal_threshold:
+      name: "Normal irrigation threshold (%)"
+      description: "Weighted humidity below which irrigation starts"
+      default: 40
+      selector:
+        number:
+          min: 20
+          max: 60
+          step: 5
+          unit_of_measurement: "%"
+          mode: slider
+
+    normal_duration:
+      name: "Normal irrigation duration (minutes)"
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 20
+          step: 1
+          unit_of_measurement: "min"
+          mode: slider
+
+    # --- Time window ---
+    start_time:
+      name: "Irrigation start time"
+      default: "06:00:00"
+      selector:
+        time:
+
+    end_time:
+      name: "Irrigation end time"
+      default: "09:00:00"
+      selector:
+        time:
+
+    # --- Cooldown ---
+    cooldown_minutes:
+      name: "Post-irrigation cooldown (minutes)"
+      description: "Wait after each cycle to allow absorption"
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 60
+          step: 5
+          unit_of_measurement: "min"
+          mode: slider
+
+    # --- Vacation mode ---
+    vacation_threshold:
+      name: "Vacation irrigation threshold (%)"
+      description: "Higher threshold to intervene earlier when you're away"
+      default: 50
+      selector:
+        number:
+          min: 20
+          max: 60
+          step: 5
+          unit_of_measurement: "%"
+          mode: slider
+
+    vacation_irrigation_duration:
+      name: "Vacation irrigation duration (minutes)"
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 20
+          step: 1
+          unit_of_measurement: "min"
+          mode: slider
+
+    # --- Boolean helpers ---
+    irrigation_pause:
+      name: "Helper — Irrigation pause"
+      description: "input_boolean for manual pause (create a dedicated helper for this terrace)"
+      selector:
+        entity:
+          domain: input_boolean
+
+    vacation_mode:
+      name: "Helper — Vacation mode"
+      description: "input_boolean for vacation mode (create a dedicated helper for this terrace)"
+      selector:
+        entity:
+          domain: input_boolean
+
+    irrigation_in_progress:
+      name: "Helper — Irrigation in progress"
+      description: "internal semaphore input_boolean (create a dedicated helper for this terrace)"
+      selector:
+        entity:
+          domain: input_boolean
+
+    # --- Notifications ---
+    notification:
+      name: "Notification service"
+      description: "E.g.: notify.mobile_app_tuo_telefono"
+      default: "notify.mobile_app_tuo_telefono"
+      selector:
+        text:
+
+# ============================================================
+# AUTOMATION LOGIC
+# ============================================================
+
+variables:
+  small_pot_sensor: !input small_pot_sensor
+  large_pot_sensor:  !input large_pot_sensor
+  weight:            !input small_pot_weight
+  normal_threshold:     !input normal_threshold
+  vacation_threshold:      !input vacation_threshold
+  vacation_mode:   !input vacation_mode
+  normal_duration: !input normal_duration
+  vacation_irrigation_duration: !input vacation_irrigation_duration
+
+trigger:
+  - platform: template
+    value_template: >
+      {% set small = states(small_pot_sensor) | float(0) %}
+      {% set large  = states(large_pot_sensor)  | float(0) %}
+      {% set moisture = (small * weight + large * (1 - weight)) | round(1) %}
+      {% if is_state(vacation_mode, 'on') %}
+        {{ moisture < (vacation_threshold | float(50)) }}
+      {% else %}
+        {{ moisture < (normal_threshold | float(40)) }}
+      {% endif %}
+    for:
+      minutes: 5
+
+condition:
+  - condition: state
+    entity_id: !input irrigation_pause
+    state: "off"
+  - condition: state
+    entity_id: !input irrigation_in_progress
+    state: "off"
+  - condition: time
+    after:  !input start_time
+    before: !input end_time
+
+action:
+  # Set in-progress flag
+  - service: input_boolean.turn_on
+    target:
+      entity_id: !input irrigation_in_progress
+
+  # Calculate duration based on mode
+  - variables:
+      duration: >
+        {% if is_state(vacation_mode, 'on') %}
+          {{ vacation_irrigation_duration | int(8) }}
+        {% else %}
+          {{ normal_duration | int(5) }}
+        {% endif %}
+      current_moisture: >
+        {% set small = states(small_pot_sensor) | float(0) %}
+        {% set large  = states(large_pot_sensor)  | float(0) %}
+        {{ (small * weight + large * (1 - weight)) | round(1) }}
+
+  # Open the valve
+  - service: switch.turn_on
+    target:
+      entity_id: !input irrigation_valve
+
+  # Wait the calculated duration
+  - delay:
+      minutes: "{{ duration }}"
+
+  # Close the valve
+  - service: switch.turn_off
+    target:
+      entity_id: !input irrigation_valve
+
+  # Absorption cooldown
+  - delay:
+      minutes: !input cooldown_minutes
+
+  # Check if moisture still low → notify
+  - variables:
+      current_moisture_post: >
+        {% set small = states(small_pot_sensor) | float(0) %}
+        {% set large  = states(large_pot_sensor)  | float(0) %}
+        {{ (small * weight + large * (1 - weight)) | round(1) }}
+      active_threshold: >
+        {% if is_state(vacation_mode, 'on') %}
+          {{ vacation_threshold | float(50) }}
+        {% else %}
+          {{ normal_threshold | float(40) }}
+        {% endif %}
+
+  - if:
+      - condition: template
+        value_template: "{{ current_moisture_post < active_threshold }}"
+    then:
+      - service: !input notification
+        data:
+          title: "🌱 Terrace — Attention"
+          message: >
+            Moisture still at {{ current_moisture_post }}% after irrigation.
+            Check pots or sensors.
+
+  # Clear in-progress flag
+  - service: input_boolean.turn_off
+    target:
+      entity_id: !input irrigation_in_progress
+
+mode: single
