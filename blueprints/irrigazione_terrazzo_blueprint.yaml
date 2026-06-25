@@ -1,0 +1,266 @@
+# ============================================================
+# BLUEPRINT — Sistema Irrigazione Terrazzo
+# ============================================================
+# Installazione:
+#   1. Copia questo file in:
+#      config/blueprints/automation/irrigazione_terrazzo.yaml
+#   2. Riavvia Home Assistant o ricarica i blueprint
+#   3. Vai in Impostazioni → Automazioni → Crea automazione
+#      → Da blueprint → "Sistema Irrigazione Terrazzo"
+#   4. Compila il form per ogni terrazzo e salva
+# ============================================================
+
+blueprint:
+  name: "Sistema Irrigazione Terrazzo"
+  description: >
+    Irrigazione automatica basata su media ponderata di due sensori
+    di umidità (vasi piccoli e grandi). Include modalità vacanza,
+    cooldown post-irrigazione, pausa manuale e notifiche push.
+  domain: automation
+  author: "Thomas"
+
+  input:
+    # --- Sensori ---
+    sensore_vaso_piccolo:
+      name: "Sensore umidità — vasi piccoli"
+      description: "Sensore Zigbee posizionato in un vaso piccolo rappresentativo"
+      selector:
+        entity:
+          domain: sensor
+          device_class: moisture
+
+    sensore_vaso_grande:
+      name: "Sensore umidità — vasi grandi"
+      description: "Sensore Zigbee posizionato in un vaso grande rappresentativo"
+      selector:
+        entity:
+          domain: sensor
+          device_class: moisture
+
+    # --- Valvola ---
+    valvola:
+      name: "Valvola irrigazione (Aqua One)"
+      description: "Switch che controlla l'apertura dell'acqua"
+      selector:
+        entity:
+          domain: switch
+
+    # --- Pesi e soglie ---
+    peso_vasi_piccoli:
+      name: "Peso vasi piccoli"
+      description: "Priorità dei vasi piccoli nel calcolo (0.0 = solo grandi, 1.0 = solo piccoli)"
+      default: 0.7
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.05
+          mode: slider
+
+    soglia_normale:
+      name: "Soglia irrigazione normale (%)"
+      description: "Umidità ponderata sotto cui si avvia l'irrigazione"
+      default: 40
+      selector:
+        number:
+          min: 20
+          max: 60
+          step: 5
+          unit_of_measurement: "%"
+          mode: slider
+
+    durata_normale:
+      name: "Durata irrigazione normale (minuti)"
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 20
+          step: 1
+          unit_of_measurement: "min"
+          mode: slider
+
+    # --- Fascia oraria ---
+    ora_inizio:
+      name: "Ora inizio irrigazione"
+      default: "06:00:00"
+      selector:
+        time:
+
+    ora_fine:
+      name: "Ora fine irrigazione"
+      default: "09:00:00"
+      selector:
+        time:
+
+    # --- Cooldown ---
+    cooldown_minuti:
+      name: "Cooldown post-irrigazione (minuti)"
+      description: "Attesa dopo ogni ciclo per permettere l'assorbimento"
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 60
+          step: 5
+          unit_of_measurement: "min"
+          mode: slider
+
+    # --- Modalità vacanza ---
+    soglia_vacanza:
+      name: "Soglia irrigazione vacanza (%)"
+      description: "Soglia più alta per intervenire prima quando sei assente"
+      default: 50
+      selector:
+        number:
+          min: 20
+          max: 60
+          step: 5
+          unit_of_measurement: "%"
+          mode: slider
+
+    durata_vacanza:
+      name: "Durata irrigazione vacanza (minuti)"
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 20
+          step: 1
+          unit_of_measurement: "min"
+          mode: slider
+
+    # --- Helper booleani ---
+    pausa_irrigazione:
+      name: "Helper — Pausa irrigazione"
+      description: "input_boolean per la pausa manuale (crea un helper dedicato per questo terrazzo)"
+      selector:
+        entity:
+          domain: input_boolean
+
+    modalita_vacanza:
+      name: "Helper — Modalità vacanza"
+      description: "input_boolean per la modalità vacanza (crea un helper dedicato per questo terrazzo)"
+      selector:
+        entity:
+          domain: input_boolean
+
+    irrigazione_in_corso:
+      name: "Helper — Irrigazione in corso"
+      description: "input_boolean semaforo interno (crea un helper dedicato per questo terrazzo)"
+      selector:
+        entity:
+          domain: input_boolean
+
+    # --- Notifiche ---
+    notifica:
+      name: "Servizio notifica"
+      description: "Es: notify.mobile_app_tuo_telefono"
+      default: "notify.mobile_app_tuo_telefono"
+      selector:
+        text:
+
+# ============================================================
+# LOGICA AUTOMAZIONE
+# ============================================================
+
+variables:
+  sensore_piccolo: !input sensore_vaso_piccolo
+  sensore_grande:  !input sensore_vaso_grande
+  peso:            !input peso_vasi_piccoli
+  soglia_norm:     !input soglia_normale
+  soglia_vac:      !input soglia_vacanza
+  modalita_vac:    !input modalita_vacanza
+
+trigger:
+  - platform: template
+    value_template: >
+      {% set piccolo = states(sensore_piccolo) | float(0) %}
+      {% set grande  = states(sensore_grande)  | float(0) %}
+      {% set umidita = (piccolo * peso + grande * (1 - peso)) | round(1) %}
+      {% if is_state(modalita_vac, 'on') %}
+        {{ umidita < soglia_vac | float(50) }}
+      {% else %}
+        {{ umidita < soglia_norm | float(40) }}
+      {% endif %}
+    for:
+      minutes: 5
+
+condition:
+  - condition: state
+    entity_id: !input pausa_irrigazione
+    state: "off"
+  - condition: state
+    entity_id: !input irrigazione_in_corso
+    state: "off"
+  - condition: time
+    after:  !input ora_inizio
+    before: !input ora_fine
+
+action:
+  # Attiva semaforo
+  - service: input_boolean.turn_on
+    target:
+      entity_id: !input irrigazione_in_corso
+
+  # Calcola durata in base alla modalità
+  - variables:
+      durata_minuti: >
+        {% if is_state(modalita_vac, 'on') %}
+          {{ !input durata_vacanza | int(8) }}
+        {% else %}
+          {{ !input durata_normale | int(5) }}
+        {% endif %}
+      umidita_attuale: >
+        {% set piccolo = states(!input sensore_vaso_piccolo) | float(0) %}
+        {% set grande  = states(!input sensore_vaso_grande)  | float(0) %}
+        {{ (piccolo * peso + grande * (1 - peso)) | round(1) }}
+
+  # Apre la valvola
+  - service: switch.turn_on
+    target:
+      entity_id: !input valvola
+
+  # Attende la durata calcolata
+  - delay:
+      minutes: "{{ durata_minuti }}"
+
+  # Chiude la valvola
+  - service: switch.turn_off
+    target:
+      entity_id: !input valvola
+
+  # Cooldown assorbimento
+  - delay:
+      minutes: !input cooldown_minuti
+
+  # Controlla se umidità ancora bassa → notifica
+  - variables:
+      umidita_post: >
+        {% set piccolo = states(!input sensore_vaso_piccolo) | float(0) %}
+        {% set grande  = states(!input sensore_vaso_grande)  | float(0) %}
+        {{ (piccolo * peso + grande * (1 - peso)) | round(1) }}
+      soglia_attiva: >
+        {% if is_state(modalita_vac, 'on') %}
+          {{ soglia_vac | float(50) }}
+        {% else %}
+          {{ soglia_norm | float(40) }}
+        {% endif %}
+
+  - if:
+      - condition: template
+        value_template: "{{ umidita_post < soglia_attiva }}"
+    then:
+      - service: !input notifica
+        data:
+          title: "🌱 Terrazzo — Attenzione"
+          message: >
+            Umidità ancora al {{ umidita_post }}% dopo l'irrigazione.
+            Controlla i vasi o i sensori.
+
+  # Disattiva semaforo
+  - service: input_boolean.turn_off
+    target:
+      entity_id: !input irrigazione_in_corso
+
+mode: single
