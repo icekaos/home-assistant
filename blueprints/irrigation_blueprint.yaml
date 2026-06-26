@@ -287,8 +287,6 @@ trigger:
       {% set yesterday_start = start - timedelta(days=1) %}
       {% set yesterday_end = end - timedelta(days=1) %}
       {{ moisture < threshold and ((now() >= start and now() <= end) or (now() >= yesterday_start and now() <= yesterday_end)) }}
-    for:
-      minutes: 5
 
 condition:
   - condition: state
