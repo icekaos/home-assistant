@@ -193,6 +193,22 @@ blueprint:
         entity:
           domain: input_boolean
 
+    # --- Retry ---
+    retry_wait_seconds:
+      name: "Retry wait (seconds)"
+      description: >
+        Seconds to wait after the open command before checking
+        if the valve responded. If still off, one retry is sent.
+        Recommended: 10
+      default: 10
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 5
+          unit_of_measurement: "s"
+          mode: slider
+
     # --- Notifications ---
     notification_device:
       name: "Notification device"
@@ -322,10 +338,42 @@ action:
         {% set large  = states(large_pot_sensor)  | float(0) %}
         {{ (small * weight + large * (1 - weight)) | round(1) }}
 
-  # Open the valve
+  # Open the valve — first attempt
   - service: switch.turn_on
     target:
       entity_id: !input irrigation_valve
+
+  # Wait and check if valve responded (deep sleep workaround)
+  - delay:
+      seconds: !input retry_wait_seconds
+
+  - if:
+      - condition: state
+        entity_id: !input irrigation_valve
+        state: "off"
+    then:
+      # Second attempt
+      - service: switch.turn_on
+        target:
+          entity_id: !input irrigation_valve
+
+      - delay:
+          seconds: !input retry_wait_seconds
+
+      # If still off after retry → notify and abort
+      - if:
+          - condition: state
+            entity_id: !input irrigation_valve
+            state: "off"
+        then:
+          - device_id: !input notification_device
+            domain: mobile_app
+            type: notify
+            title: "⚠️ Terrace — Valve error"
+            message: >
+              The valve did not respond after 2 attempts.
+              Check the Zigbee device.
+          - stop: "Valve not responding after retry"
 
   - if:
       - condition: template
