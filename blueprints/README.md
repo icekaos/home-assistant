@@ -7,75 +7,111 @@ configuration.
 
 File: `irrigation_blueprint.yaml`
 
-The `Terrace Irrigation System` blueprint automates terrace irrigation using two
-soil moisture sensors, one representative of small pots and one representative
-of large pots. It calculates a weighted average moisture value and starts
-irrigation only when the terrace is dry enough and the current time is inside
-the configured irrigation window.
+The `Terrace Irrigation System` blueprint controls a terrace irrigation valve
+using a precomputed terrace moisture sensor and a shared threshold helper.
 
-## What It Does
+The moisture calculation is intentionally kept outside the blueprint. This keeps
+the dashboard and the irrigation automation aligned: both read the same terrace
+moisture value and the same threshold.
 
-The automation:
+## Architecture
 
-- reads the moisture value from the small-pot sensor;
-- reads the moisture value from the large-pot sensor;
-- calculates a weighted average moisture value;
-- chooses the active threshold based on normal mode or vacation mode;
-- checks whether the current time is inside the allowed watering window;
-- opens the irrigation valve when watering is needed;
-- retries once if the valve does not respond;
-- closes the valve after the configured duration;
-- waits for a cooldown period to allow water absorption;
-- optionally sends start, stop, and warning notifications.
-
-## Required Entities
-
-Each automation created from this blueprint needs:
-
-- one moisture sensor for small pots;
-- one moisture sensor for large pots;
-- one switch entity controlling the irrigation valve;
-- one `input_boolean` used as manual irrigation pause;
-- one `input_boolean` used as vacation mode;
-- one mobile app notification device.
-
-The moisture sensors should expose `device_class: moisture`.
-
-## Moisture Calculation
-
-The blueprint does not use a single sensor directly. It calculates a weighted
-average:
+The recommended setup is:
 
 ```text
-weighted_moisture = small_pot_moisture * small_pot_weight
-                  + large_pot_moisture * (1 - small_pot_weight)
+raw small-pot moisture sensor
+raw large-pot moisture sensor
+        |
+        v
+template terrace moisture sensor
+        |
+        +--> dashboard thirsty status
+        |
+        +--> irrigation blueprint
+```
+
+In this repository, the shared terrace moisture sensors are defined in:
+
+```text
+packages/notify_plant.yaml
+```
+
+Examples:
+
+```text
+sensor.plant_moisture_ts
+sensor.plant_moisture_tcm
+```
+
+The matching threshold helpers are also defined in the package:
+
+```text
+input_number.plants_threshold_ts
+input_number.plants_threshold_tcm
+```
+
+## Why The Moisture Calculation Is Outside The Blueprint
+
+Home Assistant blueprints are best suited for reusable automations and scripts.
+Template sensors are regular Home Assistant entities, so they belong in normal
+configuration, such as a package.
+
+Keeping the weighted moisture sensor outside the blueprint has three practical
+benefits:
+
+- the dashboard can show the same value used by irrigation;
+- the blueprint stays simpler and only decides whether to irrigate;
+- thresholds are configured once and reused consistently.
+
+## Terrace Moisture Calculation
+
+The terrace moisture sensor is calculated from the small-pot and large-pot
+moisture sensors:
+
+```text
+terrace_moisture = small_pot_moisture * small_pot_weight
+                 + large_pot_moisture * (1 - small_pot_weight)
 ```
 
 For example, with `small_pot_weight = 0.7`:
 
 ```text
-weighted_moisture = small_pots * 0.7 + large_pots * 0.3
+terrace_moisture = small_pots * 0.7 + large_pots * 0.3
 ```
 
-This lets the small pots influence the irrigation decision more strongly, which
-is useful because small pots usually dry faster.
+This gives more importance to small pots, which usually dry faster.
 
-## Thresholds
+## Required Inputs
 
-The blueprint has two irrigation thresholds:
+Each automation created from this blueprint needs:
 
-- `normal_threshold`: used during normal operation;
-- `vacation_threshold`: used when the vacation mode helper is `on`.
+- a terrace moisture sensor, for example `sensor.plant_moisture_ts`;
+- an irrigation threshold helper, for example `input_number.plants_threshold_ts`;
+- a switch entity controlling the irrigation valve;
+- an `input_boolean` used as manual irrigation pause;
+- a mobile app notification device;
+- irrigation duration, watering window, cooldown, and retry settings.
 
-When vacation mode is enabled, the automation uses the vacation threshold and
-the vacation irrigation duration. This is useful if you want watering to start
-earlier or last longer while nobody is at home.
+Vacation mode is intentionally not part of this blueprint.
 
-The trigger condition is:
+## When Irrigation Starts
+
+The automation starts when all of these are true:
+
+- the terrace moisture sensor is below the selected threshold helper;
+- the current time is inside the configured watering window;
+- the manual pause helper is `off`;
+- the irrigation valve is currently `off`.
+
+The core condition is:
 
 ```text
-weighted_moisture < active_threshold
+states(moisture_sensor) < states(irrigation_threshold)
 ```
+
+There is no long `for:` delay on the template trigger. The automation can start
+as soon as Home Assistant evaluates the template as true, typically after a
+referenced entity changes state or after a time-based template refresh.
 
 ## Watering Window
 
@@ -95,7 +131,7 @@ sunrise + 30 min -> 09:00
 sunset - 60 min -> sunset + 30 min
 ```
 
-The template also supports windows that cross midnight. For example:
+The template also supports windows that cross midnight:
 
 ```text
 22:00 -> 06:00
@@ -103,21 +139,25 @@ The template also supports windows that cross midnight. For example:
 
 In that case the end time is treated as belonging to the next day. The blueprint
 also checks the equivalent window from yesterday, so that `02:00` is correctly
-recognized as being inside the watering window that started the previous night.
+recognized as part of the window that started the previous night.
 
-## When The Automation Starts
+## Irrigation Cycle
 
-The automation starts when all of these are true:
+When triggered, the automation:
 
-- the weighted moisture is below the active threshold;
-- the current time is inside the configured watering window;
-- the manual pause helper is `off`;
-- the irrigation valve is currently `off`.
+- opens the irrigation valve;
+- waits for the configured retry delay;
+- retries once if the valve is still `off`;
+- sends a warning and stops if the valve does not respond after the retry;
+- optionally sends a start notification;
+- keeps the valve open for the configured duration;
+- closes the valve;
+- optionally sends a stop notification;
+- waits for the cooldown period;
+- checks whether moisture is still below threshold and sends a warning if so.
 
-There is no additional `for:` delay on the template trigger. This means the
-automation can start as soon as Home Assistant evaluates the template as true.
-In practice, this usually happens when one of the referenced entities changes
-state or when Home Assistant refreshes the time-based template evaluation.
+The post-irrigation warning is informational only. It does not start another
+watering cycle.
 
 ## Why It Does Not Loop Continuously
 
@@ -129,38 +169,26 @@ mode: single
 
 While one irrigation cycle is running, new triggers are ignored.
 
-The action sequence also includes a cooldown delay after the valve is closed.
-During the irrigation duration and the cooldown period, the automation is still
-running, so another cycle cannot start.
+The action sequence includes the irrigation duration and the cooldown delay, so
+the automation remains busy during both phases. After it finishes, it will not
+start again unless the template trigger changes from `false` to `true` again.
 
-After the automation finishes, it will not immediately start again unless the
-template trigger changes from `false` to `true` again. If the moisture remains
-below the threshold the whole time, the template remains true and does not
-produce a new trigger. A new cycle can happen later if the condition first
-becomes false and then becomes true again, or when a new watering window opens.
-
-## Valve Retry Logic
-
-After sending the first `switch.turn_on` command, the automation waits for the
-configured retry delay.
-
-If the valve is still `off`, it sends a second `switch.turn_on` command and
-waits again.
-
-If the valve is still `off` after the retry, the automation sends a notification
-and stops. This is intended to handle slow or sleeping Zigbee devices.
+If the moisture remains below the threshold continuously, the template remains
+true and does not produce a new trigger. A new cycle can happen later if the
+condition first becomes false and then becomes true again, or when a new
+watering window opens.
 
 ## Notifications
 
-The blueprint can optionally notify when irrigation starts and stops.
+The blueprint supports optional notifications for:
 
-It always has warning notification paths for:
+- irrigation start;
+- irrigation stop.
+
+It also sends warning notifications for:
 
 - valve failure after two attempts;
 - moisture still below threshold after irrigation and cooldown.
-
-The post-irrigation warning does not start a new watering cycle. It only reports
-that the measured moisture is still low after the configured absorption delay.
 
 ## Installation
 
@@ -184,8 +212,21 @@ Select:
 Terrace Irrigation System
 ```
 
-Fill in the sensors, valve, helpers, thresholds, watering window, durations, and
-notification settings for the terrace.
+For each terrace, select the matching shared entities.
+
+Example for Terrazzo Salotto:
+
+```text
+Terrace moisture sensor: sensor.plant_moisture_ts
+Irrigation threshold: input_number.plants_threshold_ts
+```
+
+Example for Terrazzo Camera Matrimoniale:
+
+```text
+Terrace moisture sensor: sensor.plant_moisture_tcm
+Irrigation threshold: input_number.plants_threshold_tcm
+```
 
 ## Suggested Defaults
 
@@ -193,24 +234,11 @@ Typical starting values:
 
 ```text
 small_pot_weight: 0.7
-normal_threshold: 40%
-vacation_threshold: 50%
-normal_duration: 5 minutes
-vacation_irrigation_duration: 8 minutes
+irrigation_threshold: 35-40%
+irrigation_duration: 5 minutes
 cooldown_minutes: 30 minutes
 retry_wait_seconds: 10 seconds
 ```
 
-Adjust these values after observing how quickly the soil moisture changes after
-watering.
-
-## Operational Notes
-
-Use the dashboard plant thresholds for visibility and diagnostics, and use the
-blueprint threshold for the actual terrace irrigation decision. The blueprint
-threshold is based on the weighted average of the two terrace sensors, so it may
-not always match the threshold of a single plant or pot group.
-
-If the moisture sensors update every few minutes, keeping the trigger without a
-long `for:` delay makes the automation respond at the first useful sensor
-update inside the watering window.
+Adjust these values after observing how quickly the measured terrace moisture
+changes after watering.

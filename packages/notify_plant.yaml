@@ -1,6 +1,6 @@
 input_number:
-  plants_threshold_ts_piccolo:
-    name: Soglia sete TS piccolo
+  plants_threshold_ts:
+    name: Soglia sete TS
     min: 0
     max: 100
     step: 1
@@ -9,8 +9,17 @@ input_number:
     icon: mdi:water-percent
     initial: 35
 
-  plants_threshold_ts_grande:
-    name: Soglia sete TS grande
+  plants_weight_ts_piccolo:
+    name: Peso vasi piccoli TS
+    min: 0
+    max: 1
+    step: 0.05
+    mode: box
+    icon: mdi:scale-balance
+    initial: 0.7
+
+  plants_threshold_tcm:
+    name: Soglia sete TCM
     min: 0
     max: 100
     step: 1
@@ -19,25 +28,14 @@ input_number:
     icon: mdi:water-percent
     initial: 35
 
-  plants_threshold_tcm_piccolo:
-    name: Soglia sete TCM piccolo
+  plants_weight_tcm_piccolo:
+    name: Peso vasi piccoli TCM
     min: 0
-    max: 100
-    step: 1
-    unit_of_measurement: "%"
+    max: 1
+    step: 0.05
     mode: box
-    icon: mdi:water-percent
-    initial: 35
-
-  plants_threshold_tcm_grande:
-    name: Soglia sete TCM grande
-    min: 0
-    max: 100
-    step: 1
-    unit_of_measurement: "%"
-    mode: box
-    icon: mdi:water-percent
-    initial: 35
+    icon: mdi:scale-balance
+    initial: 0.7
 
   plants_threshold_potus:
     name: Soglia sete Potus
@@ -61,57 +59,31 @@ input_number:
 
 template:
   - binary_sensor:
-      - name: "Plant thirsty TS piccolo"
-        unique_id: plant_thirsty_ts_piccolo
+      - name: "Plant thirsty TS"
+        unique_id: plant_thirsty_ts
         device_class: problem
         state: >
           {{
-            states('sensor.plantsensor_ts_piccolo_soil_moisture') | float(999)
-            < states('input_number.plants_threshold_ts_piccolo') | float(35)
+            states('sensor.plant_moisture_ts') | float(999)
+            < states('input_number.plants_threshold_ts') | float(35)
           }}
         attributes:
-          plant_name: "Terrazzo Salotto - vasi piccoli"
-          moisture: "{{ states('sensor.plantsensor_ts_piccolo_soil_moisture') }}"
-          threshold: "{{ states('input_number.plants_threshold_ts_piccolo') }}"
+          plant_name: "Terrazzo Salotto"
+          moisture: "{{ states('sensor.plant_moisture_ts') }}"
+          threshold: "{{ states('input_number.plants_threshold_ts') }}"
 
-      - name: "Plant thirsty TS grande"
-        unique_id: plant_thirsty_ts_grande
+      - name: "Plant thirsty TCM"
+        unique_id: plant_thirsty_tcm
         device_class: problem
         state: >
           {{
-            states('sensor.plantsensor_ts_grande_soil_moisture') | float(999)
-            < states('input_number.plants_threshold_ts_grande') | float(35)
+            states('sensor.plant_moisture_tcm') | float(999)
+            < states('input_number.plants_threshold_tcm') | float(35)
           }}
         attributes:
-          plant_name: "Terrazzo Salotto - vasi grandi"
-          moisture: "{{ states('sensor.plantsensor_ts_grande_soil_moisture') }}"
-          threshold: "{{ states('input_number.plants_threshold_ts_grande') }}"
-
-      - name: "Plant thirsty TCM piccolo"
-        unique_id: plant_thirsty_tcm_piccolo
-        device_class: problem
-        state: >
-          {{
-            states('sensor.plantsensor_tcm_piccolo_soil_moisture') | float(999)
-            < states('input_number.plants_threshold_tcm_piccolo') | float(35)
-          }}
-        attributes:
-          plant_name: "Terrazzo Camera Matrimoniale - vasi piccoli"
-          moisture: "{{ states('sensor.plantsensor_tcm_piccolo_soil_moisture') }}"
-          threshold: "{{ states('input_number.plants_threshold_tcm_piccolo') }}"
-
-      - name: "Plant thirsty TCM grande"
-        unique_id: plant_thirsty_tcm_grande
-        device_class: problem
-        state: >
-          {{
-            states('sensor.plantsensor_tcm_grande_soil_moisture') | float(999)
-            < states('input_number.plants_threshold_tcm_grande') | float(35)
-          }}
-        attributes:
-          plant_name: "Terrazzo Camera Matrimoniale - vasi grandi"
-          moisture: "{{ states('sensor.plantsensor_tcm_grande_soil_moisture') }}"
-          threshold: "{{ states('input_number.plants_threshold_tcm_grande') }}"
+          plant_name: "Terrazzo Camera Matrimoniale"
+          moisture: "{{ states('sensor.plant_moisture_tcm') }}"
+          threshold: "{{ states('input_number.plants_threshold_tcm') }}"
 
       - name: "Plant thirsty Potus"
         unique_id: plant_thirsty_potus
@@ -140,6 +112,48 @@ template:
           threshold: "{{ states('input_number.plants_threshold_stella_di_natale') }}"
 
   - sensor:
+      - name: "Plant moisture TS"
+        unique_id: plant_moisture_ts
+        device_class: moisture
+        state_class: measurement
+        unit_of_measurement: "%"
+        icon: mdi:water-percent
+        state: >
+          {% set small = states('sensor.plantsensor_ts_piccolo_soil_moisture') | float(none) %}
+          {% set large = states('sensor.plantsensor_ts_grande_soil_moisture') | float(none) %}
+          {% set weight = states('input_number.plants_weight_ts_piccolo') | float(0.7) %}
+          {% if small is none or large is none %}
+            unavailable
+          {% else %}
+            {{ (small * weight + large * (1 - weight)) | round(1) }}
+          {% endif %}
+        attributes:
+          plant_name: "Terrazzo Salotto"
+          small_pot_moisture: "{{ states('sensor.plantsensor_ts_piccolo_soil_moisture') }}"
+          large_pot_moisture: "{{ states('sensor.plantsensor_ts_grande_soil_moisture') }}"
+          small_pot_weight: "{{ states('input_number.plants_weight_ts_piccolo') }}"
+
+      - name: "Plant moisture TCM"
+        unique_id: plant_moisture_tcm
+        device_class: moisture
+        state_class: measurement
+        unit_of_measurement: "%"
+        icon: mdi:water-percent
+        state: >
+          {% set small = states('sensor.plantsensor_tcm_piccolo_soil_moisture') | float(none) %}
+          {% set large = states('sensor.plantsensor_tcm_grande_soil_moisture') | float(none) %}
+          {% set weight = states('input_number.plants_weight_tcm_piccolo') | float(0.7) %}
+          {% if small is none or large is none %}
+            unavailable
+          {% else %}
+            {{ (small * weight + large * (1 - weight)) | round(1) }}
+          {% endif %}
+        attributes:
+          plant_name: "Terrazzo Camera Matrimoniale"
+          small_pot_moisture: "{{ states('sensor.plantsensor_tcm_piccolo_soil_moisture') }}"
+          large_pot_moisture: "{{ states('sensor.plantsensor_tcm_grande_soil_moisture') }}"
+          small_pot_weight: "{{ states('input_number.plants_weight_tcm_piccolo') }}"
+
       - name: "Plants thirsty count"
         unique_id: plants_thirsty_count
         icon: mdi:flower-alert
@@ -147,10 +161,8 @@ template:
         state: >
           {{
             [
-              states('binary_sensor.plant_thirsty_ts_piccolo'),
-              states('binary_sensor.plant_thirsty_ts_grande'),
-              states('binary_sensor.plant_thirsty_tcm_piccolo'),
-              states('binary_sensor.plant_thirsty_tcm_grande'),
+              states('binary_sensor.plant_thirsty_ts'),
+              states('binary_sensor.plant_thirsty_tcm'),
               states('binary_sensor.plant_thirsty_potus'),
               states('binary_sensor.plant_thirsty_stella_di_natale')
             ] | select('eq', 'on') | list | count
@@ -162,17 +174,11 @@ template:
         state: >
           {% set thirsty = [] %}
 
-          {% if is_state('binary_sensor.plant_thirsty_ts_piccolo', 'on') %}
-            {% set thirsty = thirsty + ['Terrazzo Salotto - vasi piccoli'] %}
+          {% if is_state('binary_sensor.plant_thirsty_ts', 'on') %}
+            {% set thirsty = thirsty + ['Terrazzo Salotto'] %}
           {% endif %}
-          {% if is_state('binary_sensor.plant_thirsty_ts_grande', 'on') %}
-            {% set thirsty = thirsty + ['Terrazzo Salotto - vasi grandi'] %}
-          {% endif %}
-          {% if is_state('binary_sensor.plant_thirsty_tcm_piccolo', 'on') %}
-            {% set thirsty = thirsty + ['Terrazzo Camera Matrimoniale - vasi piccoli'] %}
-          {% endif %}
-          {% if is_state('binary_sensor.plant_thirsty_tcm_grande', 'on') %}
-            {% set thirsty = thirsty + ['Terrazzo Camera Matrimoniale - vasi grandi'] %}
+          {% if is_state('binary_sensor.plant_thirsty_tcm', 'on') %}
+            {% set thirsty = thirsty + ['Terrazzo Camera Matrimoniale'] %}
           {% endif %}
           {% if is_state('binary_sensor.plant_thirsty_potus', 'on') %}
             {% set thirsty = thirsty + ['Potus'] %}
