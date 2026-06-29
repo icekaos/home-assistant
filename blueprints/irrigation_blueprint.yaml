@@ -176,9 +176,9 @@ action:
           - device_id: !input notification_device
             domain: mobile_app
             type: notify
-            title: "⚠️ Terrace — Valve error"
+            title: "⚠️ {{ zone_name }} — Valve error"
             message: >
-              The valve did not respond after 2 attempts.
+              {{ zone_name }}: The valve did not respond after 2 attempts.
               Check the Zigbee device.
           - stop: "Valve not responding after retry"
 
