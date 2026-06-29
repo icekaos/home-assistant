@@ -104,6 +104,13 @@ blueprint:
       selector:
         boolean:
 
+    # --- Zone name ---
+    zone_name:
+      name: "Zone name"
+      description: "Name of the irrigated zone (e.g., 'Front terrace', 'Back garden')"
+      selector:
+        text:
+
 # ============================================================
 # AUTOMATION LOGIC
 # ============================================================
@@ -114,6 +121,7 @@ variables:
   normal_duration: !input normal_duration
   notify_on_start: !input notify_on_start
   notify_on_stop: !input notify_on_stop
+  zone_name: !input zone_name
 
 trigger:
   - platform: time
@@ -181,7 +189,7 @@ action:
       - device_id: !input notification_device
         domain: mobile_app
         type: notify
-        title: "🌱 Terrace — Irrigation started"
+        title: "🌱 {{ zone_name }} — Irrigation started"
         message: >
           Irrigation started. Current moisture is {{ current_moisture }}%.
 
@@ -201,7 +209,7 @@ action:
       - device_id: !input notification_device
         domain: mobile_app
         type: notify
-        title: "🌱 Terrace — Irrigation stopped"
+        title: "🌱 {{ zone_name }} — Irrigation stopped"
         message: >
           Irrigation stopped after {{ duration }} minutes.
 
