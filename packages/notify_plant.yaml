@@ -7,7 +7,6 @@ input_number:
     unit_of_measurement: "%"
     mode: box
     icon: mdi:water-percent
-    initial: 35
 
   plants_weight_ts_piccolo:
     name: Peso vasi piccoli TS
@@ -16,7 +15,6 @@ input_number:
     step: 0.05
     mode: box
     icon: mdi:scale-balance
-    initial: 0.7
 
   plants_threshold_tcm:
     name: Soglia sete TCM
@@ -26,7 +24,6 @@ input_number:
     unit_of_measurement: "%"
     mode: box
     icon: mdi:water-percent
-    initial: 35
 
   plants_weight_tcm_piccolo:
     name: Peso vasi piccoli TCM
@@ -35,7 +32,6 @@ input_number:
     step: 0.05
     mode: box
     icon: mdi:scale-balance
-    initial: 0.7
 
   plants_threshold_potus:
     name: Soglia sete Potus
@@ -45,7 +41,6 @@ input_number:
     unit_of_measurement: "%"
     mode: box
     icon: mdi:water-percent
-    initial: 30
 
   plants_threshold_stella_di_natale:
     name: Soglia sete Stella di Natale
@@ -55,7 +50,6 @@ input_number:
     unit_of_measurement: "%"
     mode: box
     icon: mdi:water-percent
-    initial: 30
 
 template:
   - binary_sensor:

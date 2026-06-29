@@ -13,8 +13,8 @@
 blueprint:
   name: "Terrace Irrigation System"
   description: >
-    Automatic irrigation based on an external terrace moisture sensor.
-    Includes post-irrigation cooldown, manual pause and push notifications.
+    Automatic irrigation based on a terrace moisture sensor.
+    Triggers daily at a fixed time to check and irrigate if needed.
   domain: automation
   author: "Thomas"
 
@@ -22,7 +22,7 @@ blueprint:
     # --- Moisture ---
     moisture_sensor:
       name: "Terrace moisture sensor"
-      description: "Template sensor that exposes the calculated terrace moisture"
+      description: "Sensor that measures soil moisture"
       selector:
         entity:
           domain: sensor
@@ -38,7 +38,7 @@ blueprint:
 
     irrigation_threshold:
       name: "Irrigation threshold"
-      description: "input_number helper shared with the dashboard"
+      description: "Moisture level below which irrigation starts"
       selector:
         entity:
           domain: input_number
@@ -54,84 +54,18 @@ blueprint:
           unit_of_measurement: "min"
           mode: slider
 
-    # --- Time window ---
-    start_mode:
-      name: "Start mode"
-      default: "time"
-      selector:
-        select:
-          options:
-            - label: "Fixed time"
-              value: "time"
-            - label: "Sunrise"
-              value: "sunrise"
-            - label: "Sunset"
-              value: "sunset"
-
-    start_fixed_time:
+    # --- Start time ---
+    start_time:
       name: "Start time"
       default: "06:00:00"
+      description: "Daily time to check and irrigate if needed"
       selector:
         time:
-
-    start_sun_offset:
-      name: "Start sun offset (minutes)"
-      default: 0
-      selector:
-        number:
-          min: -120
-          max: 120
-          step: 5
-          unit_of_measurement: "min"
-          mode: slider
-
-    end_mode:
-      name: "End mode"
-      default: "time"
-      selector:
-        select:
-          options:
-            - label: "Fixed time"
-              value: "time"
-            - label: "Sunrise"
-              value: "sunrise"
-            - label: "Sunset"
-              value: "sunset"
-
-    end_time:
-      name: "End time"
-      default: "09:00:00"
-      selector:
-        time:
-
-    end_sun_offset:
-      name: "End sun offset (minutes)"
-      default: 0
-      selector:
-        number:
-          min: -120
-          max: 120
-          step: 5
-          unit_of_measurement: "min"
-          mode: slider
-
-    # --- Cooldown ---
-    cooldown_minutes:
-      name: "Post-irrigation cooldown (minutes)"
-      description: "Wait after each cycle to allow absorption"
-      default: 30
-      selector:
-        number:
-          min: 10
-          max: 60
-          step: 5
-          unit_of_measurement: "min"
-          mode: slider
 
     # --- Boolean helpers ---
     irrigation_pause:
       name: "Helper — Irrigation pause"
-      description: "input_boolean for manual pause (create a dedicated helper for this terrace)"
+      description: "input_boolean for manual pause"
       selector:
         entity:
           domain: input_boolean
@@ -139,10 +73,7 @@ blueprint:
     # --- Retry ---
     retry_wait_seconds:
       name: "Retry wait (seconds)"
-      description: >
-        Seconds to wait after the open command before checking
-        if the valve responded. If still off, one retry is sent.
-        Recommended: 10
+      description: "Seconds to wait after valve command before checking response"
       default: 10
       selector:
         number:
@@ -155,7 +86,7 @@ blueprint:
     # --- Notifications ---
     notification_device:
       name: "Notification device"
-      description: "Mobile app device that receives post-irrigation warnings"
+      description: "Mobile app device for notifications"
       selector:
         device:
           filter:
@@ -181,44 +112,12 @@ variables:
   moisture_sensor: !input moisture_sensor
   irrigation_threshold: !input irrigation_threshold
   normal_duration: !input normal_duration
-  start_mode: !input start_mode
-  start_fixed_time: !input start_fixed_time
-  start_sun_offset: !input start_sun_offset
-  end_mode: !input end_mode
-  end_time: !input end_time
-  end_sun_offset: !input end_sun_offset
   notify_on_start: !input notify_on_start
   notify_on_stop: !input notify_on_stop
 
 trigger:
-  - platform: template
-    value_template: >
-      {% set moisture = states(moisture_sensor) | float(none) %}
-      {% set threshold = states(irrigation_threshold) | float(none) %}
-      {% set start_offset = timedelta(minutes=start_sun_offset | int(0)) %}
-      {% if start_mode == 'sunrise' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
-        {% set start = next_sun + start_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + start_offset %}
-      {% elif start_mode == 'sunset' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
-        {% set start = next_sun + start_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + start_offset %}
-      {% else %}
-        {% set start = today_at(start_fixed_time) %}
-      {% endif %}
-      {% set end_offset = timedelta(minutes=end_sun_offset | int(0)) %}
-      {% if end_mode == 'sunrise' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
-        {% set end = next_sun + end_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + end_offset %}
-      {% elif end_mode == 'sunset' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
-        {% set end = next_sun + end_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + end_offset %}
-      {% else %}
-        {% set end = today_at(end_time) %}
-      {% endif %}
-      {% set end = end + timedelta(days=1) if end <= start else end %}
-      {% set yesterday_start = start - timedelta(days=1) %}
-      {% set yesterday_end = end - timedelta(days=1) %}
-      {{ moisture is not none and threshold is not none and moisture < threshold and ((now() >= start and now() <= end) or (now() >= yesterday_start and now() <= yesterday_end)) }}
+  - platform: time
+    at: !input start_time
 
 condition:
   - condition: state
@@ -227,32 +126,9 @@ condition:
   - condition: state
     entity_id: !input irrigation_valve
     state: "off"
-  - condition: template
-    value_template: >
-      {% set start_offset = timedelta(minutes=start_sun_offset | int(0)) %}
-      {% if start_mode == 'sunrise' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
-        {% set start = next_sun + start_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + start_offset %}
-      {% elif start_mode == 'sunset' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
-        {% set start = next_sun + start_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + start_offset %}
-      {% else %}
-        {% set start = today_at(start_fixed_time) %}
-      {% endif %}
-      {% set end_offset = timedelta(minutes=end_sun_offset | int(0)) %}
-      {% if end_mode == 'sunrise' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))) %}
-        {% set end = next_sun + end_offset if is_state('sun.sun', 'below_horizon') else next_sun - timedelta(days=1) + end_offset %}
-      {% elif end_mode == 'sunset' %}
-        {% set next_sun = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))) %}
-        {% set end = next_sun + end_offset if is_state('sun.sun', 'above_horizon') else next_sun - timedelta(days=1) + end_offset %}
-      {% else %}
-        {% set end = today_at(end_time) %}
-      {% endif %}
-      {% set end = end + timedelta(days=1) if end <= start else end %}
-      {% set yesterday_start = start - timedelta(days=1) %}
-      {% set yesterday_end = end - timedelta(days=1) %}
-      {{ (now() >= start and now() <= end) or (now() >= yesterday_start and now() <= yesterday_end) }}
+  - condition: numeric_state
+    entity_id: !input moisture_sensor
+    below: !input irrigation_threshold
 
 action:
   # Calculate values used by notifications
@@ -266,7 +142,7 @@ action:
     target:
       entity_id: !input irrigation_valve
 
-  # Wait and check if valve responded (deep sleep workaround)
+  # Wait and check if valve responded
   - delay:
       seconds: !input retry_wait_seconds
 
@@ -329,28 +205,4 @@ action:
         message: >
           Irrigation stopped after {{ duration }} minutes.
 
-  # Absorption cooldown
-  - delay:
-      minutes: !input cooldown_minutes
-
-  # Check if moisture still low → notify
-  - variables:
-      current_moisture_post: >
-        {{ states(moisture_sensor) | float(0) | round(1) }}
-      active_threshold: "{{ states(irrigation_threshold) | float(40) }}"
-
-  - if:
-      - condition: template
-        value_template: >
-          {% set moisture = current_moisture_post | float(none) %}
-          {% set threshold = active_threshold | float(none) %}
-          {{ moisture is not none and threshold is not none and moisture < threshold }}
-    then:
-      - device_id: !input notification_device
-        domain: mobile_app
-        type: notify
-        title: "🌱 Terrace — Attention"
-        message: >
-          Moisture still at {{ current_moisture_post }}% after irrigation.
-          Check pots or sensors.
 mode: single
