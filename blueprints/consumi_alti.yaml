@@ -1,0 +1,88 @@
+blueprint:
+  name: Consumi troppo alti
+  description: Avvisa via TTS e notifica critica quando la potenza supera una soglia per un certo tempo.
+  domain: automation
+  input:
+    power_sensor:
+      name: Sensore di potenza
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+    threshold:
+      name: Soglia (W)
+      default: 4500
+      selector:
+        number:
+          min: 500
+          max: 10000
+          step: 50
+          unit_of_measurement: W
+    delay:
+      name: Attesa prima di scattare
+      default:
+        seconds: 0
+      selector:
+        duration:
+    media_player:
+      name: Media player per l'annuncio
+      selector:
+        entity:
+          domain: media_player
+    tts_entity:
+      name: Entità TTS
+      selector:
+        entity:
+          domain: tts
+    notify_services:
+      name: Servizi di notifica
+      description: Uno per riga, es. notify.mobile_app_iphone_di_thomas
+      default: []
+      selector:
+        text:
+          multiple: true
+
+mode: single
+
+variables:
+  threshold: !input threshold
+  media_player: !input media_player
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input power_sensor
+    above: !input threshold
+    for: !input delay
+
+actions:
+  - action: media_player.volume_set
+    target:
+      entity_id: !input media_player
+    data:
+      volume_level: 0.5
+  - action: tts.speak
+    target:
+      entity_id: !input tts_entity
+    data:
+      message: Attenzione, consumi troppo alti
+      media_player_entity_id: !input media_player
+      language: it-IT
+  - action: media_player.volume_set
+    target:
+      entity_id: !input media_player
+    data:
+      volume_level: 0.2
+  - repeat:
+      for_each: !input notify_services
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: Consumi troppo alti
+            message: "I consumi hanno superato i {{ threshold }}W, a breve la corrente verrà staccata"
+            data:
+              push:
+                interruption-level: critical
+                sound:
+                  critical: 1
+                  name: default
+                  volume: 1
