@@ -67,11 +67,6 @@ actions:
       message: Attenzione, consumi troppo alti
       media_player_entity_id: !input media_player
       language: it_IT
-  - action: media_player.volume_set
-    target:
-      entity_id: !input media_player
-    data:
-      volume_level: 0.2
   - repeat:
       for_each: !input notify_services
       sequence:
